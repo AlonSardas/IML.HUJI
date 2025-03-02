@@ -4,6 +4,8 @@ from ...base import BaseEstimator
 import numpy as np
 from itertools import product
 
+from ...metrics import misclassification_error
+
 
 class DecisionStump(BaseEstimator):
     """
@@ -20,12 +22,19 @@ class DecisionStump(BaseEstimator):
     self.sign_: int
         The label to predict for samples where the value of the j'th feature is about the threshold
     """
+
     def __init__(self) -> DecisionStump:
         """
         Instantiate a Decision stump classifier
         """
         super().__init__()
         self.threshold_, self.j_, self.sign_ = None, None, None
+        self.weights_ = None
+
+    def use_weights(self, weights:np.ndarray):
+        if self.fitted_:
+            raise ValueError("Estimator cannot change its weights after calling ``fit``")
+        self.weights_ = weights
 
     def _fit(self, X: np.ndarray, y: np.ndarray) -> NoReturn:
         """
@@ -39,7 +48,33 @@ class DecisionStump(BaseEstimator):
         y : ndarray of shape (n_samples, )
             Responses of input data to fit to
         """
-        raise NotImplementedError()
+        n_samples, n_features = X.shape
+        assert len(y) == n_samples
+        if self.weights_ is None:
+            self.weights_ = np.ones(n_samples) / n_samples
+        else:
+            assert len(self.weights_) == n_samples
+
+        thresholds = np.zeros(n_features)
+        errs = np.zeros(n_features)
+        signs = np.zeros(n_features)
+        for j in range(n_features):
+            pos_threshold, pos_err = self._find_threshold(X[:, j], y, 1)
+            neg_threshold, neg_err = self._find_threshold(X[:, j], y, -1)
+
+            if pos_err < neg_err:
+                threshold, error, sign = pos_threshold, pos_err, 1
+            else:
+                threshold, error, sign = neg_threshold, neg_err, -1
+
+            thresholds[j] = threshold
+            errs[j] = error
+            signs[j] = sign
+
+        best_j = np.argmin(errs)
+        self.threshold_ = thresholds[best_j]
+        self.j_ = best_j
+        self.sign_ = signs[best_j]
 
     def _predict(self, X: np.ndarray) -> np.ndarray:
         """
@@ -63,7 +98,13 @@ class DecisionStump(BaseEstimator):
         Feature values strictly below threshold are predicted as `-sign` whereas values which equal
         to or above the threshold are predicted as `sign`
         """
-        raise NotImplementedError()
+        n_samples, n_features = X.shape
+        prediction = np.ones(n_samples)
+        values = X[:, self.j_]
+        positive_samples = values >= self.threshold_
+        negative_samples = np.bitwise_not(positive_samples)
+        prediction[negative_samples] = -1
+        return prediction
 
     def _find_threshold(self, values: np.ndarray, labels: np.ndarray, sign: int) -> Tuple[float, float]:
         """
@@ -95,7 +136,31 @@ class DecisionStump(BaseEstimator):
         For every tested threshold, values strictly below threshold are predicted as `-sign` whereas values
         which equal to or above the threshold are predicted as `sign`
         """
-        raise NotImplementedError()
+        # Comment1: It doesn't sound to me very efficient to scan like that all the values and test the error,
+        # I would assume that something better can be done with sorting the values and using cumsum
+        # to find the best threshold. Not sure exactly if it is much better
+        #
+        # Comment2:
+        # We can know for sure that the best assignment for this threshold is assignment of
+        # the last element in the negative box (otherwise, we would be better to take one step to
+        # the left and decrease the loss
+        losses = np.zeros(len(values))
+        for m, value in enumerate(values):
+            positive_samples = values >= value
+            negative_samples = np.bitwise_not(positive_samples)
+
+            pos_weights = self.weights_[positive_samples]
+            neg_weights = self.weights_[negative_samples]
+
+            loss_pos = np.sum(pos_weights[sign != labels[positive_samples]])
+            loss_neg = np.sum(neg_weights[-sign != labels[negative_samples]])
+            loss_pos = 0 if np.isnan(loss_pos) else loss_pos
+            loss_neg = 0 if np.isnan(loss_neg) else loss_neg
+            total_loss = loss_pos + loss_neg
+            losses[m] = total_loss
+
+        best_split = np.argmin(losses)
+        return values[best_split], losses[best_split]
 
     def _loss(self, X: np.ndarray, y: np.ndarray) -> float:
         """
@@ -114,4 +179,5 @@ class DecisionStump(BaseEstimator):
         loss : float
             Performance under missclassification loss function
         """
-        raise NotImplementedError()
+        y_predict = self.predict(X)
+        return misclassification_error(y, y_predict)

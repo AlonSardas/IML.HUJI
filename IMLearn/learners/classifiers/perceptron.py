@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 from typing import Callable
 from typing import NoReturn
-from ...base import BaseEstimator
+
 import numpy as np
+
+from ...base import BaseEstimator
 
 
 def default_callback(fit: Perceptron, x: np.ndarray, y: int):
@@ -73,7 +76,27 @@ class Perceptron(BaseEstimator):
         -----
         Fits model with or without an intercept depending on value of `self.fit_intercept_`
         """
-        raise NotImplementedError()
+        if self.include_intercept_:
+            X = self._fix_intercept(X)
+
+        m, d = X.shape
+        self.coefs_ = np.zeros(d)
+        for it in range(self.max_iter_):
+            # Find i that is misclassified:
+            w = self.coefs_
+            classification = y * (X @ w)
+            had_fix = False
+            for i in range(m):
+                if classification[i] <= 0:
+                    # Fix w
+                    w = w + y[i] * X[i, :]
+                    self.coefs_ = w
+                    self.callback_(self, X[i, :], y[i]*(X[i, :] @ w))
+                    had_fix = True
+                    break
+            if not had_fix:
+                # All is correctly classified
+                break
 
     def _predict(self, X: np.ndarray) -> np.ndarray:
         """
@@ -89,7 +112,10 @@ class Perceptron(BaseEstimator):
         responses : ndarray of shape (n_samples, )
             Predicted responses of given samples
         """
-        raise NotImplementedError()
+        w = self.coefs_
+        if self.include_intercept_:
+            X = self._fix_intercept(X)
+        return np.sign(X @ w)
 
     def _loss(self, X: np.ndarray, y: np.ndarray) -> float:
         """
@@ -109,4 +135,12 @@ class Perceptron(BaseEstimator):
             Performance under missclassification loss function
         """
         from ...metrics import misclassification_error
-        raise NotImplementedError()
+        return misclassification_error(y, self._predict(X))
+
+    def _fix_intercept(self, X):
+        if self.include_intercept_:
+            if X.ndim == 1:
+                X = np.array([X]).transpose()
+            m, d = X.shape
+            X = np.append(X, np.ones((m, 1)), axis=1)
+        return X

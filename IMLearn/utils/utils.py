@@ -1,3 +1,4 @@
+from math import floor
 from typing import Tuple
 import numpy as np
 import pandas as pd
@@ -33,8 +34,20 @@ def split_train_test(X: pd.DataFrame, y: pd.Series, train_proportion: float = .7
         Responses of test samples
 
     """
-    raise NotImplementedError()
+    # Well, I could use
+    # train_test_split(X, y, test_size=0.2)
 
+    n_samples, n_features = X.shape
+    test_counts = floor((1-train_proportion) * n_samples)
+    test_chosen = np.random.choice(np.arange(n_samples), test_counts, replace=False)
+    bits = np.zeros(n_samples)
+    bits[test_chosen] = 1
+
+    test_X = X.loc[bits == 1, :]
+    test_y = y.loc[bits == 1]
+    train_X = X.loc[bits == 0, :]
+    train_y = y.loc[bits == 0]
+    return train_X, train_y, test_X, test_y
 
 def confusion_matrix(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """

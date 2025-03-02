@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import warnings
 from typing import Callable, NoReturn
 import numpy as np
 
@@ -39,6 +41,7 @@ class GradientDescent:
         Callable function receives as input any argument relevant for the current GD iteration. Arguments
         are specified in the `GradientDescent.fit` function
     """
+
     def __init__(self,
                  learning_rate: BaseLR = FixedLR(1e-3),
                  tol: float = 1e-5,
@@ -119,4 +122,35 @@ class GradientDescent:
                 Euclidean norm of w^(t)-w^(t-1)
 
         """
-        raise NotImplementedError()
+        best_weights = f.weights
+        best_output = f.compute_output(X=X, y=y)
+        weights_average = f.weights
+        for t in range(self.max_iter_):
+            grad = f.compute_jacobian(X=X, y=y)
+            eta = self.learning_rate_.lr_step(t=t)
+            diff = eta * grad
+            f.weights = f.weights - diff
+            delta = np.linalg.norm(diff)
+            val = f.compute_output(X=X, y=y)
+            self.callback_(solver=self, weights=f.weights, val=val, grad=grad,
+                           t=t, eta=eta, delta=delta)
+
+            if val < best_output:
+                best_weights = f.weights
+            weights_average = (weights_average * (t + 1) + f.weights) / (t + 2)
+
+            if delta <= self.tol_:
+                break
+
+        else:
+            warnings.warn(
+                f"Gradient descent reached the maximum iteration {self.max_iter_} without reaching required tolerance")
+
+        if self.out_type_ == "best":
+            return best_weights
+        elif self.out_type_ == "last":
+            return f.weights
+        elif self.out_type_ == "average":
+            return weights_average
+        else:
+            raise ValueError(f"Unknown output type {self.out_type_}")

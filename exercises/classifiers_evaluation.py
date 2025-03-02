@@ -1,3 +1,8 @@
+import os
+
+import matplotlib.pyplot as plt
+
+from IMLearn import BaseEstimator
 from IMLearn.learners.classifiers import Perceptron, LDA, GaussianNaiveBayes
 from typing import Tuple
 from utils import *
@@ -38,17 +43,24 @@ def run_perceptron():
     """
     for n, f in [("Linearly Separable", "linearly_separable.npy"), ("Linearly Inseparable", "linearly_inseparable.npy")]:
         # Load dataset
-        raise NotImplementedError()
+        filepath = os.path.join('..', 'datasets', f)
+        X, y = load_dataset(filepath)
 
         # Fit Perceptron and record loss in each fit iteration
         losses = []
-        raise NotImplementedError()
+        def callback(fitter:Perceptron, xxxx, yyy):
+            losses.append(fitter._loss(X, y))
+
+        fitter = Perceptron(callback=callback)
+        fitter.fit(X, y)
 
         # Plot figure of loss as function of fitting iteration
-        raise NotImplementedError()
+        fig, ax = plt.subplots()
+        ax.plot(losses, '.')
+        plt.show()
 
 
-def get_ellipse(mu: np.ndarray, cov: np.ndarray):
+def get_ellipse(ax, mu: np.ndarray, cov: np.ndarray):
     """
     Draw an ellipse centered at given location and according to specified covariance matrix
 
@@ -70,7 +82,7 @@ def get_ellipse(mu: np.ndarray, cov: np.ndarray):
     xs = (l1 * np.cos(theta) * np.cos(t)) - (l2 * np.sin(theta) * np.sin(t))
     ys = (l1 * np.sin(theta) * np.cos(t)) + (l2 * np.cos(theta) * np.sin(t))
 
-    return go.Scatter(x=mu[0] + xs, y=mu[1] + ys, mode="lines", marker_color="black")
+    return ax.plot(mu[0] + xs, mu[1] + ys, c="k")[0]
 
 
 def compare_gaussian_classifiers():
@@ -79,28 +91,55 @@ def compare_gaussian_classifiers():
     """
     for f in ["gaussian1.npy", "gaussian2.npy"]:
         # Load dataset
-        raise NotImplementedError()
+        filepath = os.path.join('..', 'datasets', f)
+        X, y = load_dataset(filepath)
 
         # Fit models and predict over training set
-        raise NotImplementedError()
+        lda_fitter = LDA()
+        lda_fitter.fit(X, y)
+
+        naive_fitter = GaussianNaiveBayes()
+        naive_fitter.fit(X, y)
+        print(lda_fitter.mu_)
+        print(naive_fitter.mu_)
+        print(naive_fitter.vars_)
 
         # Plot a figure with two suplots, showing the Gaussian Naive Bayes predictions on the left and LDA predictions
         # on the right. Plot title should specify dataset used and subplot titles should specify algorithm and accuracy
         # Create subplots
         from IMLearn.metrics import accuracy
-        raise NotImplementedError()
+        fig, ax = plt.subplots()
+        ax.scatter(X[:, 0], X[:, 1], c=y)
 
-        # Add traces for data-points setting symbols and colors
-        raise NotImplementedError()
+        fig, axes = plt.subplots(1, 2)
+        def plot(ax, fitter:BaseEstimator, name:str):
+            predicted_ys = fitter.predict(X)
+            acc = accuracy(y, predicted_ys)
+            ax.set_title(f"{name}, accuracy={acc:.3f}")
+            ax.scatter(X[:, 0], X[:, 1], c=predicted_ys)
+            wrong_X = X[y != predicted_ys, :]
+            ax.scatter(wrong_X[:, 0], wrong_X[:, 1], c='r', marker='x', s=20)
 
-        # Add `X` dots specifying fitted Gaussians' means
-        raise NotImplementedError()
+        plot(axes[0], naive_fitter, 'Naive Gaussian')
+        mu = naive_fitter.mu_
+        axes[0].scatter(mu[:, 0], mu[:, 1], c='k', marker='x', s=30)
+        plot(axes[1], lda_fitter, 'LDA')
+        mu = lda_fitter.mu_
+        axes[1].scatter(mu[:, 0], mu[:, 1], c='k', marker='x', s=30)
 
-        # Add ellipses depicting the covariances of the fitted Gaussians
-        raise NotImplementedError()
+        ax = axes[0]
+        for k in range(naive_fitter.n_classes):
+            vars = naive_fitter.vars_[k, :]
+            cov = np.diag(vars)
+            get_ellipse(ax, naive_fitter.mu_[k, :], cov)
+        ax = axes[1]
+        for k in range(lda_fitter.n_classes):
+            get_ellipse(ax, lda_fitter.mu_[k, :], lda_fitter.cov_)
+
+        plt.show()
 
 
 if __name__ == '__main__':
     np.random.seed(0)
-    run_perceptron()
+    # run_perceptron()
     compare_gaussian_classifiers()
